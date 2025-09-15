@@ -1,0 +1,604 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Diary (Companion to Tasks)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root{
+      --bg:#0b1020; --panel:#121a35; --panel2:#0f1530; --text:#eaf0ff; --muted:#aab4d6;
+      --border:#1f2a4f; --accent:#5b8cff; --accent2:#74d680; --warn:#ffcc66; --danger:#ff6b6b; --mark:#fff2a8;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:linear-gradient(180deg,#0a0f1f 0%, #0e1430 100%);color:var(--text)}
+    header{position:sticky;top:0;z-index:10;padding:12px;border-bottom:1px solid var(--border);background:rgba(13,18,40,.75);backdrop-filter:blur(6px) saturate(140%)}
+    .container{max-width:1000px;margin:16px auto;padding:0 12px}
+    .hrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    h1{margin:0;font-size:18px}
+    .sub{margin-top:2px;color:var(--muted);font-size:12px}
+    input[type="text"],input[type="date"],textarea,select{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:#0b1433;color:#eaf0ff;outline:none}
+    textarea{min-height:140px}
+    .btn{appearance:none;border:none;border-radius:10px;padding:9px 13px;color:#fff;font-weight:800;cursor:pointer;transition:.15s transform ease,.2s background ease}
+    .btn:hover{transform:translateY(-1px)}
+    .btn.primary{background:linear-gradient(180deg,var(--accent) 0%,#3f69ff 100%)}
+    .btn.secondary{background:#1a2446;border:1px solid var(--border);color:#dfe7ff}
+    .btn.ok{background:linear-gradient(180deg,var(--accent2) 0%,#3fbf74 100%)}
+    .btn.warn{background:linear-gradient(180deg,var(--warn) 0%,#f5b24e 100%);color:#2a1b05}
+    .btn.danger{background:linear-gradient(180deg,var(--danger) 0%,#ff5252 100%)}
+    .btn.sm{padding:6px 10px;font-size:12px}
+    .card{background:linear-gradient(180deg,var(--panel) 0%,var(--panel2) 100%);border:1px solid var(--border);border-radius:16px;padding:12px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    .list{margin-top:10px;border:1px solid var(--border);border-radius:12px;overflow:hidden}
+    .row{display:flex;gap:12px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer}
+    .row:last-child{border-bottom:none}
+    .row .meta{flex:1;min-width:0}
+    .muted{color:var(--muted);font-size:12px}
+    .small{font-size:12px}
+    .pill{display:inline-block;padding:3px 8px;border-radius:999px;font-size:12px;font-weight:900}
+    .p-linked{background:#1d3b28;color:#9ef0b3}
+    .p-standalone{background:#2c2f41;color:#b9c1ff}
+    .p-important{background:#4b2d09;color:#ffd59a}
+    .wa{display:inline-flex;width:22px;height:22px;align-items:center;justify-content:center;background:#1c7c54;border-radius:6px;margin-left:6px}
+    .wa svg{width:14px;height:14px;fill:#fff}
+    .hidden{display:none}
+    .hr{height:1px;background:var(--border);margin:10px 0}
+    .inline{display:flex;gap:8px;align-items:center}
+    .wrap{flex-wrap:wrap}
+    .grow{flex:1}
+    .right{margin-left:auto}
+    @keyframes flash{0%{box-shadow:0 0 0 0 rgba(91,140,255,.9)}100%{box-shadow:0 0 0 12px rgba(91,140,255,0)}}
+    .flash{animation:flash 1s ease-out 0s 1;border-color:#5b8cff !important;background:linear-gradient(180deg,#13204a 0%,#0f1738 100%)}
+    /* Modal */
+    .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:50}
+    .modal{width:min(860px,96vw);max-height:92vh;overflow:auto;background:#0e1430;border:1px solid var(--border);border-radius:14px;padding:14px}
+    .modal h3{margin:0 0 10px 0}
+    /* Toasts */
+    #toaster{position:fixed;right:12px;bottom:12px;display:flex;flex-direction:column;gap:8px;z-index:9999}
+    .toast{min-width:240px;max-width:420px;padding:9px 12px;border-radius:10px;color:#fff;font-weight:700;box-shadow:0 10px 20px rgba(0,0,0,.25)}
+    .toast.info{background:#2b4a9e}.toast.success{background:#2a7a47}.toast.error{background:#a33a3a}
+    .toast button{background:transparent;border:none;color:#fff;margin-left:6px;cursor:pointer;font-weight:900}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="hrow">
+      <div class="grow">
+        <h1>Diary</h1>
+        <div class="sub">Standalone notes or link to Tasks. Uses the same storage as your Tasks app.</div>
+      </div>
+      <button class="btn secondary sm" onclick="D && D.importJSON()">Import JSON</button>
+      <button class="btn secondary sm" onclick="D && D.exportCSV()">Export CSV</button>
+      <button class="btn secondary sm" onclick="D && D.backupJSON()">Backup</button>
+      <button class="btn primary" onclick="D && D.openEntry()">Add Entry</button>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="card">
+      <div class="inline wrap">
+        <input id="search" class="grow" type="text" placeholder="Search title/body/tags…">
+        <button id="filterAll" class="btn secondary sm">All</button>
+        <button id="filterImp" class="btn secondary sm">Important</button>
+        <select id="linkFilter" class="btn secondary sm" style="padding:6px 10px">
+          <option value="all">Linked: All</option>
+          <option value="linked">Linked only</option>
+          <option value="standalone">Standalone only</option>
+        </select>
+        <div class="right small muted" id="dataStatus"></div>
+      </div>
+      <div class="hr"></div>
+      <div class="inline wrap" style="gap:8px">
+        <input id="qaTitle" class="grow" type="text" placeholder="Quick add title…">
+        <input id="qaTags" class="grow" type="text" placeholder="tags (comma)…">
+        <label class="inline" style="gap:6px"><input id="qaImportant" type="checkbox"> Important</label>
+        <button id="qaSave" class="btn ok">Quick Save</button>
+      </div>
+      <div class="hr"></div>
+      <div id="list" class="list"></div>
+    </div>
+  </div>
+
+  <!-- Diary Modal -->
+  <div id="entryModal" class="modal-backdrop">
+    <div class="modal">
+      <h3 id="modalTitle">Add Entry</h3>
+      <div class="small muted" id="linkState" style="margin:0 0 8px"></div>
+      <div class="inline wrap" style="gap:12px">
+        <div style="min-width:150px">
+          <label>Date</label>
+          <input id="enDate" type="date">
+        </div>
+        <div class="grow">
+          <label>Title</label>
+          <input id="enTitle" type="text" placeholder="Title (e.g., Customer arrived from abroad)">
+        </div>
+      </div>
+      <div class="inline wrap" style="gap:12px; margin-top:8px">
+        <div class="grow">
+          <label>Tags (comma)</label>
+          <input id="enTags" type="text" placeholder="arrival, follow-up">
+        </div>
+        <label class="inline" style="gap:6px; margin-top:22px"><input id="enImportant" type="checkbox"> Important</label>
+      </div>
+      <div class="hr"></div>
+      <label>Body</label>
+      <textarea id="enBody" placeholder="Write details here…"></textarea>
+
+      <div class="hr"></div>
+      <div class="inline wrap" style="gap:12px">
+        <div class="grow">
+          <label>Link to Task (optional)</label>
+          <select id="enTaskLink"></select>
+          <div class="small muted" id="enTaskMeta" style="margin-top:6px"></div>
+        </div>
+        <button id="prefillFromTask" class="btn warn sm" title="Copy details from selected task">Prefill</button>
+      </div>
+
+      <div class="hr"></div>
+      <div class="inline wrap">
+        <div class="inline" style="gap:8px">
+          <button id="saveBtn" class="btn ok">Save</button>
+          <button id="cancelBtn" class="btn secondary">Cancel</button>
+        </div>
+        <div class="right inline" style="gap:8px">
+          <button id="shareBtn" class="btn secondary sm">Share/Save .txt</button>
+          <button id="emailBtn" class="btn secondary sm">Email</button>
+          <button id="deleteBtn" class="btn danger sm hidden">Delete</button>
+          <div class="small muted" id="timestamps"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <input id="jsonFile" type="file" accept="application/json" class="hidden"/>
+
+  <div id="toaster"></div>
+
+  <script>
+  (function(){
+    'use strict';
+    const D = window.D = {};
+
+    /* ===== Utils ===== */
+    const q = sel => document.querySelector(sel);
+    const qAll = sel => Array.from(document.querySelectorAll(sel));
+    const nowISO = () => new Date().toISOString();
+    const fmtDate = d => d ? new Date(d).toLocaleString() : "";
+    const escapeHtml = s => String(s??"").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c] || c));
+    const uuid = ()=> ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c/4).toString(16));
+    const normalizeDigits = s => (s||"").replace(/[^\d]/g,"");
+    const waHref = raw=>{
+      let d = normalizeDigits(raw||"");
+      if(d.startsWith('00')) d = d.slice(2);
+      return d ? `https://wa.me/${d}` : '#';
+    };
+
+    /* ===== Toasts ===== */
+    const elToaster = q('#toaster');
+    function toast(type, msg, ms=2500){
+      try{
+        const el = document.createElement('div');
+        el.className = `toast ${type}`;
+        el.innerHTML = `<span>${escapeHtml(msg)}</span><button onclick="this.parentElement.remove()">✕</button>`;
+        elToaster.appendChild(el);
+        setTimeout(()=>{ el.remove(); }, ms);
+      }catch(e){ alert(msg); }
+    }
+
+    /* ===== Storage (same keys as Tasks app) ===== */
+    const LS_CUSTOMERS = "ct_customers_v1";
+    const LS_TASKS = "ct_tasks_v1";
+    const LS_LEADS = "ct_leads_v1";
+    const LS_DIARY = "ct_diary_v1";
+
+    let customers = load(LS_CUSTOMERS, []);
+    let tasks = load(LS_TASKS, []);
+    let leads = load(LS_LEADS, []);
+    let diary = load(LS_DIARY, []);
+
+    function load(key, fallback){
+      try{ const s = localStorage.getItem(key); return s ? JSON.parse(s) : fallback; }
+      catch(e){ console.warn('load', key, e); return fallback; }
+    }
+    function saveAll(){
+      try{
+        localStorage.setItem(LS_CUSTOMERS, JSON.stringify(customers));
+        localStorage.setItem(LS_TASKS, JSON.stringify(tasks));
+        localStorage.setItem(LS_LEADS, JSON.stringify(leads));
+        localStorage.setItem(LS_DIARY, JSON.stringify(diary));
+        render();
+      }catch(e){ console.error('saveAll', e); }
+    }
+
+    /* ===== UI state ===== */
+    let showImportantOnly = false;
+    const elList = q('#list');
+    const elSearch = q('#search');
+    const elLinkFilter = q('#linkFilter');
+    const elDataStatus = q('#dataStatus');
+
+    function render(){
+      // Data status
+      const have = {
+        C: customers.length, T: tasks.length, L: leads.length, D: diary.length
+      };
+      elDataStatus.textContent = `Data: Cust ${have.C} • Tasks ${have.T} • Leads ${have.L} • Diary ${have.D}`;
+
+      // Render list
+      const term = (elSearch.value||"").toLowerCase().trim();
+      const linkMode = elLinkFilter.value; // all | linked | standalone
+
+      elList.innerHTML = "";
+      let pool = diary.slice();
+      if (showImportantOnly) pool = pool.filter(e=>!!e.important);
+      if (linkMode==='linked') pool = pool.filter(e=>!!e.linkTaskId);
+      if (linkMode==='standalone') pool = pool.filter(e=>!e.linkTaskId);
+      if (term){
+        pool = pool.filter(e=>{
+          const s = (e.title||"")+" "+(e.body||"")+" "+(e.tags||[]).join(" ");
+          return s.toLowerCase().includes(term);
+        });
+      }
+      pool.sort((a,b)=> new Date(b.updatedAt||b.createdAt) - new Date(a.updatedAt||a.createdAt));
+
+      if (!pool.length){
+        elList.innerHTML = `<div class="row"><div class="meta">No diary entries.</div><button class="btn primary sm" onclick="D.openEntry()">Add Entry</button></div>`;
+        return;
+      }
+
+      for (const e of pool){
+        const linked = !!e.linkTaskId;
+        const t = linked ? tasks.find(x=>x.id===e.linkTaskId) : null;
+        const c = t ? customers.find(x=>x.id===t.customerId) : null;
+        const num = c && (c.numbers||[])[0] ? String(c.numbers[0]) : "";
+        const wa = num ? `
+          <a class="wa" href="${waHref(num)}" target="_blank" onclick="event.stopPropagation()" title="WhatsApp ${escapeHtml(num)}">
+            <svg viewBox="0 0 32 32"><path d="M19.11 17.23c-.27-.13-1.6-.79-1.85-.88-.25-.09-.43-.13-.62.13-.18.27-.71.88-.87 1.06-.16.18-.32.2-.6.07-.27-.13-1.14-.42-2.17-1.33-.8-.71-1.34-1.59-1.5-1.86-.16-.27-.02-.41.11-.54.11-.11.27-.29.4-.45.13-.16.18-.27.27-.45.09-.18.04-.34-.02-.47-.07-.13-.62-1.49-.85-2.05-.22-.53-.45-.46-.62-.46-.16 0-.34-.02-.52-.02-.18 0-.47.07-.71.34-.25.27-.96.94-.96 2.29 0 1.35.98 2.65 1.11 2.83.13.18 1.93 2.95 4.68 4.14.65.28 1.16.45 1.56.57.65.21 1.24.18 1.71.11.52-.08 1.6-.65 1.82-1.29.22-.65.22-1.2.16-1.31-.07-.11-.25-.18-.52-.31zM16.02 5.33c-5.9 0-10.68 4.77-10.68 10.68 0 1.88.49 3.72 1.41 5.34L5 27l5.79-1.52c1.58.86 3.37 1.31 5.18 1.31h.01c5.9 0 10.68-4.77 10.68-10.68 0-2.85-1.11-5.53-3.13-7.55-2.02-2.02-4.7-3.23-7.55-3.23z"/></svg>
+          </a>` : "";
+
+        const row = document.createElement('div');
+        row.className = 'row';
+        row.dataset.entryId = e.id;
+        row.tabIndex = 0;
+        row.innerHTML = `
+          <div class="meta">
+            <div class="inline">
+              <strong>${escapeHtml(e.title||'(no title)')}</strong>
+              ${e.important?`<span class="pill p-important" style="margin-left:8px">Important</span>`:""}
+              ${linked?`<span class="pill p-linked" style="margin-left:8px">Linked</span>`:`<span class="pill p-standalone" style="margin-left:8px">Standalone</span>`}
+            </div>
+            <div class="muted small" style="margin-top:4px">
+              ${escapeHtml((e.tags||[]).join(", "))} • Date: ${escapeHtml(e.date||"")} • Created: ${fmtDate(e.createdAt)} • Updated: ${fmtDate(e.updatedAt)}
+              ${linked && c?` • Customer: ${escapeHtml(c.name||"")} ${num?`• ${escapeHtml(num)}`:""}`:""}
+            </div>
+          </div>
+          ${wa?`<div class="inline">${wa}</div>`:""}
+        `;
+        elList.appendChild(row);
+      }
+    }
+
+    /* ===== Header filters/search ===== */
+    q('#filterAll').addEventListener('click', ()=>{ showImportantOnly=false; render(); });
+    q('#filterImp').addEventListener('click', ()=>{ showImportantOnly=true; render(); });
+    elSearch.addEventListener('input', render);
+    elLinkFilter.addEventListener('change', render);
+
+    /* ===== Entry modal ===== */
+    const elEntryModal = q('#entryModal');
+    const elModalTitle = q('#modalTitle');
+    const elLinkState = q('#linkState');
+    const elEnDate = q('#enDate');
+    const elEnTitle = q('#enTitle');
+    const elEnTags = q('#enTags');
+    const elEnImportant = q('#enImportant');
+    const elEnBody = q('#enBody');
+    const elEnTaskLink = q('#enTaskLink');
+    const elEnTaskMeta = q('#enTaskMeta');
+    const elPrefillFromTask = q('#prefillFromTask');
+    const elSaveBtn = q('#saveBtn');
+    const elCancelBtn = q('#cancelBtn');
+    const elDeleteBtn = q('#deleteBtn');
+    const elShareBtn = q('#shareBtn');
+    const elEmailBtn = q('#emailBtn');
+    const elTimestamps = q('#timestamps');
+    let editingId = null;
+
+    function populateTaskSelect(){
+      elEnTaskLink.innerHTML = '<option value="">-- none (standalone) --</option>';
+      const pool = tasks.slice().sort((a,b)=> new Date(b.updatedAt||b.createdAt) - new Date(a.updatedAt||a.createdAt));
+      for (const t of pool){
+        const c = customers.find(x=>x.id===t.customerId);
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.textContent = `${c?c.name:'(customer)'} — ${t.description?.slice(0,40)||'(task)'} (${t.status})`;
+        elEnTaskLink.appendChild(opt);
+      }
+    }
+    function updateLinkMeta(){
+      const id = elEnTaskLink.value;
+      if (!id){
+        elEnTaskMeta.textContent = 'Standalone note (not linked to a task).';
+        elLinkState.textContent = 'Standalone';
+        return;
+      }
+      const t = tasks.find(x=>x.id===id);
+      if (!t){ elEnTaskMeta.textContent='(task missing)'; elLinkState.textContent='Linked (missing)'; return; }
+      const c = customers.find(x=>x.id===t.customerId);
+      elEnTaskMeta.textContent = `Linked to: ${c?c.name:'(customer)'} • ${t.description||'(no desc)'} • Status: ${t.status}`;
+      elLinkState.textContent = 'Linked';
+    }
+    elEnTaskLink.addEventListener('change', updateLinkMeta);
+
+    function openEntry(id=null){
+      editingId = id;
+      populateTaskSelect();
+      if (id){
+        const e = diary.find(x=>x.id===id);
+        elModalTitle.textContent = 'Edit Entry';
+        elEnDate.value = e?.date || new Date().toISOString().slice(0,10);
+        elEnTitle.value = e?.title || '';
+        elEnTags.value = (e?.tags||[]).join(', ');
+        elEnImportant.checked = !!e?.important;
+        elEnBody.value = e?.body || '';
+        elEnTaskLink.value = e?.linkTaskId || '';
+        updateLinkMeta();
+        elTimestamps.textContent = `Created: ${fmtDate(e.createdAt)} • Updated: ${fmtDate(e.updatedAt)}`;
+        elDeleteBtn.classList.remove('hidden');
+      }else{
+        elModalTitle.textContent = 'Add Entry';
+        elEnDate.value = new Date().toISOString().slice(0,10);
+        elEnTitle.value = '';
+        elEnTags.value = '';
+        elEnImportant.checked = false;
+        elEnBody.value = '';
+        elEnTaskLink.value = '';
+        updateLinkMeta();
+        elTimestamps.textContent = '';
+        elDeleteBtn.classList.add('hidden');
+      }
+      elEntryModal.style.display = 'flex';
+      setTimeout(()=>elEnTitle.focus(),0);
+    }
+    function closeEntry(){ elEntryModal.style.display = 'none'; }
+    D.openEntry = openEntry;
+
+    // Prefill from selected task
+    elPrefillFromTask.addEventListener('click', ()=>{
+      const id = elEnTaskLink.value;
+      if (!id){ toast('info','Select a task first'); return; }
+      const t = tasks.find(x=>x.id===id); if (!t){ toast('error','Task missing'); return; }
+      const c = customers.find(x=>x.id===t.customerId);
+      const today = new Date().toISOString().slice(0,10);
+      const name = c?.name || '';
+      const num = (c?.numbers||[])[0] || '';
+      const title = `${name}${name&&num?' — ':''}${num}`.trim() || '(untitled)';
+      const details = [
+        elEnBody.value ? elEnBody.value : (t.description||''),
+        elEnBody.value ? '' : '',
+        '--- Task Details ---',
+        `Customer: ${name}`,
+        `Numbers: ${(c?.numbers||[]).join(', ')}`,
+        `Status: ${t.status||''}`,
+        `Due Date: ${t.dueDate||''}`
+      ].join('\n');
+      elEnDate.value = today;
+      if (!elEnTitle.value) elEnTitle.value = title;
+      elEnBody.value = details;
+      toast('success','Prefilled from task');
+    });
+
+    elSaveBtn.addEventListener('click', ()=>{
+      const d = elEnDate.value || new Date().toISOString().slice(0,10);
+      const title = (elEnTitle.value||'').trim();
+      const tags = (elEnTags.value||'').split(',').map(s=>s.trim()).filter(Boolean);
+      const imp = !!elEnImportant.checked;
+      const body = elEnBody.value||'';
+      const link = elEnTaskLink.value || '';
+      if (editingId){
+        const e = diary.find(x=>x.id===editingId); if (!e) return;
+        e.date=d; e.title=title; e.tags=tags; e.important=imp; e.body=body; e.linkTaskId=link||null; e.updatedAt=nowISO();
+      }else{
+        diary.push({ id: uuid(), date:d, title, tags, important:imp, body, linkTaskId: link||null, createdAt: nowISO(), updatedAt: nowISO() });
+      }
+      saveAll(); closeEntry(); toast('success','Entry saved');
+    });
+    elCancelBtn.addEventListener('click', closeEntry);
+    elDeleteBtn.addEventListener('click', ()=>{
+      if (!editingId) return;
+      if (!confirm('Delete this entry? This cannot be undone.')) return;
+      const idx = diary.findIndex(x=>x.id===editingId);
+      if (idx!==-1) diary.splice(idx,1);
+      saveAll(); closeEntry(); toast('success','Entry deleted');
+    });
+
+    function entryToText(e){
+      const tags = (e.tags||[]).join(', ');
+      const lines = [
+        `Date: ${e.date||''}`,
+        `Title: ${e.title||''}`,
+        `Tags: ${tags}`,
+        `Important: ${e.important?'Yes':'No'}`,
+        `Linked: ${e.linkTaskId ? 'Yes' : 'No'}`,
+        ''
+      ];
+      if (e.body) lines.push(e.body, '');
+      if (e.linkTaskId){
+        const t = tasks.find(x=>x.id===e.linkTaskId);
+        if (t){
+          const c = customers.find(x=>x.id===t.customerId);
+          lines.push('--- Task Details ---');
+          lines.push(`Customer: ${c?c.name:''}`);
+          lines.push(`Numbers: ${c?(c.numbers||[]).join(', '):''}`);
+          lines.push(`Status: ${t.status||''}`);
+          lines.push(`Due Date: ${t.dueDate||''}`);
+          lines.push(`Task Description: ${t.description||''}`);
+          lines.push('');
+        }
+      }
+      return lines.join('\n');
+    }
+
+    async function shareTxt(filename, text){
+      const blob = new Blob([text], {type:'text/plain;charset=utf-8'});
+      try{
+        const file = new File([blob], filename, {type: blob.type});
+        if (navigator.canShare && navigator.canShare({ files: [file] })){
+          await navigator.share({ files: [file], title: filename, text: 'Diary entry' });
+          return;
+        }
+      }catch(e){}
+      try{
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = filename; a.target = '_blank'; a.click();
+        setTimeout(()=>URL.revokeObjectURL(url), 2000);
+        return;
+      }catch(e){}
+      const hinted = 'data:text/plain;charset=utf-8;name=' + encodeURIComponent(filename) + ',' + encodeURIComponent(text);
+      window.location.href = hinted;
+    }
+
+    elShareBtn.addEventListener('click', ()=>{
+      const id = editingId; if (!id) return;
+      const e = diary.find(x=>x.id===id); if (!e) return;
+      shareTxt((e.title||'entry')+'.txt', entryToText(e));
+    });
+
+    elEmailBtn.addEventListener('click', ()=>{
+      const tmp = {
+        id: editingId||uuid(),
+        date: elEnDate.value || new Date().toISOString().slice(0,10),
+        title: (elEnTitle.value||'').trim(),
+        tags: (elEnTags.value||'').split(',').map(s=>s.trim()).filter(Boolean),
+        important: !!elEnImportant.checked,
+        body: elEnBody.value||'',
+        linkTaskId: elEnTaskLink.value || ''
+      };
+      const subject = encodeURIComponent(`Diary: ${tmp.title||'(no title)'} (${tmp.date})`);
+      const body = encodeURIComponent(entryToText(tmp));
+      window.location.href = `mailto:dairy4mathew@gmail.com?subject=${subject}&body=${body}`;
+    });
+
+    /* ===== Quick add ===== */
+    q('#qaSave').addEventListener('click', ()=>{
+      const title = (q('#qaTitle').value||'').trim();
+      const tags = (q('#qaTags').value||'').split(',').map(s=>s.trim()).filter(Boolean);
+      const imp = !!q('#qaImportant').checked;
+      const d = new Date().toISOString().slice(0,10);
+      if (!title){ toast('error','Add a title first'); return; }
+      diary.push({ id: uuid(), date:d, title, tags, important:imp, body:'', linkTaskId:null, createdAt: nowISO(), updatedAt: nowISO() });
+      q('#qaTitle').value=''; q('#qaTags').value=''; q('#qaImportant').checked=false;
+      saveAll(); toast('success','Quick entry added');
+    });
+
+    /* ===== Import/Export/Backup ===== */
+    function exportCSV(){
+      try{
+        const rows = [["EntryID","Date","Title","Tags","Important","LinkedTaskID","Body","Created At","Updated At"]];
+        for(const e of diary){
+          rows.push([e.id, e.date||"", e.title||"", (e.tags||[]).join("; "), e.important? "Yes":"No", e.linkTaskId||"", (e.body||"").replace(/\n/g,'\\n'), e.createdAt||"", e.updatedAt||""]);
+        }
+        saveCSV("Diary.csv", rows);
+        toast('success','Diary CSV exported');
+      }catch(e){ console.error('export', e); toast('error','Export failed'); }
+    }
+    function saveCSV(filename, rows){
+      const csv = rows.map(r => r.map(cell => {
+        const s = String(cell??"");
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
+      }).join(",")).join("\n");
+      const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
+      try{
+        const file = new File([blob], filename, {type: blob.type});
+        if (navigator.canShare && navigator.canShare({ files: [file] })){
+          navigator.share({ files: [file], title: filename });
+          return;
+        }
+      }catch(e){}
+      try{
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = filename; a.target = "_blank"; a.click();
+        setTimeout(()=>URL.revokeObjectURL(url), 1500);
+        return;
+      }catch(e){}
+      const dataUrl = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
+      window.location.href = dataUrl;
+    }
+    function backupJSON(){
+      const payload = { version:2, exportedAt: nowISO(), customers, tasks, leads, diary };
+      const blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
+      try{
+        const file = new File([blob], 'customer_tasks_backup.json', {type: blob.type});
+        if (navigator.canShare && navigator.canShare({ files: [file] })){
+          navigator.share({ files: [file], title: 'Backup JSON' });
+          return;
+        }
+      }catch(e){}
+      try{
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'customer_tasks_backup.json'; a.click();
+        setTimeout(()=>URL.revokeObjectURL(url), 1000);
+        return;
+      }catch(e){}
+      const dataUrl = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(payload));
+      window.location.href = dataUrl;
+    }
+    function importJSON(){
+      const inp = q('#jsonFile'); if (!inp) return;
+      inp.value = "";
+      inp.onchange = ()=>{
+        const file = inp.files && inp.files[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = ()=>{
+          try{
+            const payload = JSON.parse(reader.result);
+            const C = payload.customers || payload.C || [];
+            const T = payload.tasks || payload.T || [];
+            const L = payload.leads || payload.L || [];
+            const D = payload.diary || payload.D || [];
+            if (Array.isArray(C)) customers = C;
+            if (Array.isArray(T)) tasks = T;
+            if (Array.isArray(L)) leads = L;
+            if (Array.isArray(D)) diary = D;
+            saveAll();
+            toast('success','Imported JSON');
+          }catch(e){ console.error(e); toast('error','Bad JSON file'); }
+        };
+        reader.readAsText(file);
+      };
+      inp.click();
+    }
+    D.exportCSV = exportCSV;
+    D.backupJSON = backupJSON;
+    D.importJSON = importJSON;
+
+    /* ===== Row open (edit) ===== */
+    elList.addEventListener('click', (e)=>{
+      const row = e.target.closest('.row[data-entry-id]'); if (!row) return;
+      openEntry(row.dataset.entryId);
+    });
+    elList.addEventListener('keydown', (e)=>{
+      if (e.key !== 'Enter') return;
+      const row = e.target.closest('.row[data-entry-id]'); if (row) openEntry(row.dataset.entryId);
+    });
+
+    /* ===== Init ===== */
+    // Storage health indicator
+    try{
+      const testKey = '__test__';
+      localStorage.setItem(testKey, 'ok');
+      localStorage.removeItem(testKey);
+      q('#dataStatus').title = 'Local storage OK';
+    }catch(e){
+      q('#dataStatus').textContent += ' • (storage blocked)';
+    }
+
+    render();
+  })();
+  </script>
+
+  <div id="toaster"></div>
+</body>
+</html>
